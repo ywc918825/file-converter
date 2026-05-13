@@ -1,11 +1,10 @@
-const axios = require('axios');
+const fetch = require('node-fetch');
 const FormData = require('form-data');
+const { parse } = require('parse-multipart-data');
+const CONVERT_SECRET = '29E4EDmfLee8q4ZKUzA8ioAVLSrTOIH8'; // 替换！
 
-// 🔒 把你的 ConvertAPI Secret 填在这里
-const CONVERT_SECRET = '29E4EDmfLee8q4ZKUzA8ioAVLSrTOIH8';
-
-const respond = (statusCode, data) => ({
-  statusCode,
+const respond = (code, data) => ({
+  statusCode: code,
   headers: {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*'
@@ -18,42 +17,43 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return respond(405, { success: false, error: '仅支持 POST' });
 
   try {
-    const { fileBase64, fileName, targetFormat } = JSON.parse(event.body);
-    if (!fileBase64 || !fileName || !targetFormat) {
-      return respond(400, { success: false, error: '缺少参数' });
-    }
+    // 解析 multipart/form-data
+    const boundary = event.headers['content-type']?.split('boundary=')[1];
+    if (!boundary) throw new Error('缺少 boundary');
+    const parts = parse(Buffer.from(event.body, 'base64'), boundary);
 
-    const fileBuffer = Buffer.from(fileBase64, 'base64');
+    // 提取文件和参数
+    let fileBuffer = null, fileName = '', targetFormat = 'docx';
+    for (const part of parts) {
+      if (part.name === 'file') {
+        fileBuffer = part.data;
+        fileName = part.filename;
+      } else if (part.name === 'targetFormat') {
+        targetFormat = part.data.toString('utf-8');
+      }
+    }
+    if (!fileBuffer || !fileName) throw new Error('未收到文件');
+
     const fileExt = fileName.split('.').pop().toLowerCase();
     const form = new FormData();
     form.append('File', fileBuffer, { filename: fileName });
 
     const convertUrl = `https://v2.convertapi.com/convert/${fileExt}/to/${targetFormat}?secret=${CONVERT_SECRET}&StoreFile=true`;
+    console.log('转换请求:', convertUrl);
 
-    const response = await axios.post(convertUrl, form, {
-      headers: form.getHeaders(),
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity
+    const res = await fetch(convertUrl, {
+      method: 'POST',
+      body: form,
+      headers: form.getHeaders()
     });
 
-    const data = response.data;
-    if (data.Error) {
-      return respond(500, { success: false, error: data.Error });
-    }
-    if (!data.Files || !data.Files[0]) {
-      return respond(500, { success: false, error: 'ConvertAPI 未返回文件' });
-    }
+    const data = await res.json();
+    if (data.Error) return respond(500, { success: false, error: data.Error });
+    if (!data.Files || data.Files.length === 0) return respond(500, { success: false, error: 'ConvertAPI 未返回文件' });
 
     return respond(200, { success: true, downloadUrl: data.Files[0].Url });
   } catch (err) {
-    // 如果是 axios 错误，取出详细响应
-    if (err.response) {
-      const status = err.response.status;
-      const detail = typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data);
-      return respond(502, { success: false, error: `ConvertAPI 返回错误 (${status})`, detail });
-    }
-    // 其他错误
-    console.error('函数内部异常:', err);
+    console.error('云函数错误:', err);
     return respond(500, { success: false, error: err.message || '内部错误' });
   }
 };
