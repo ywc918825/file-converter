@@ -1,6 +1,6 @@
 // netlify/functions/convert.js
 // 转换专用 Secret，安全存储在后端，不暴露
-const CONVERT_SECRET = 'eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiI1MDcwMDU4NiIsInJvbCI6IlJPTEVfUkVHSVNURVIiLCJpc3MiOiJPcGVuWExhYiIsImlhdCI6MTc3ODU2NjA3MiwiY2xpZW50SWQiOiJsa3pkeDU3bnZ5MjJqa3BxOXgydyIsInBob25lIjoiIiwib3BlbklkIjpudWxsLCJ1dWlkIjoiMjUzYWUxYWEtYzkzMi00ZmFhLWJlZGUtOTQ0MGEzYmE4N2RmIiwiZW1haWwiOiIiLCJleHAiOjE3ODYzNDIwNzJ9.61mmGOZuBleHoGkSXyOK1p20GT9dLlwe7h9khlZ-PcCFdIBk9n8TZgeh6mFEIq6cmgJAgnQOv8g-ii_DRCHdOw'; // 替换为你真实的 Secret
+const CONVERT_SECRET = 'IbF2fYCb1tgokWCpsKAnjnd843IxvHMJ'; // 替换为你真实的 Secret
 
 exports.handler = async (event) => {
   // CORS 头
