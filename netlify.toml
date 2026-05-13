@@ -6,8 +6,8 @@
   node_bundler = "esbuild"
 
 [functions.convert]
-  memory = 1024      # 1GB 内存，处理大文件
-  timeout = 30       # 30 秒超时
+  memory = 1024
+  timeout = 30
 
 [[redirects]]
   from = "/api/*"
