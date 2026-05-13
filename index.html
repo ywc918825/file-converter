@@ -39,7 +39,7 @@
     <div class="upload-text" id="fileNameDisplay">点击或拖拽上传文件</div>
     <div class="upload-hint">任意文件，手机可选相册/文件</div>
   </div>
-  <!-- ✅ 修改点：accept 改为 */*，支持所有文件，避免只弹出相册 -->
+  <!-- 接受所有文件 -->
   <input type="file" id="fileInput" hidden accept="*/*">
 
   <div class="format-row">
@@ -149,21 +149,9 @@
         convertBtn.style.display = 'none';
         downloadBtn.style.display = 'block';
 
-        // 下载并重命名，避免乱码
-        downloadBtn.onclick = async () => {
-          try {
-            const dlRes = await fetch(data.downloadUrl);
-            const blob = await dlRes.blob();
-            const ext = targetFormat === 'docx' ? 'docx' : targetFormat === 'pptx' ? 'pptx' : targetFormat;
-            const newName = selectedFile.name.replace(/\.[^/.]+$/, '') + '_converted.' + ext;
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = newName;
-            a.click();
-            URL.revokeObjectURL(a.href);
-          } catch (e) {
-            errorMsg.textContent = '下载失败: ' + e.message;
-          }
+        // ✅ 关键改动：直接打开下载链接，即时响应
+        downloadBtn.onclick = () => {
+          window.open(data.downloadUrl, '_blank');
         };
       } catch (err) {
         console.error(err);
