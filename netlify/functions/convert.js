@@ -1,9 +1,7 @@
 // netlify/functions/convert.js
-// 转换专用 Secret，安全存储在后端，不暴露
-const CONVERT_SECRET = '29E4EDmfLee8q4ZKUzA8ioAVLSrTOIH8'; // 替换为你真实的 Secret
+const CONVERT_SECRET = '29E4EDmfLee8q4ZKUzA8ioAVLSrTOIH8'; // 替换为真实 Secret
 
 exports.handler = async (event) => {
-  // CORS 头
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -15,39 +13,37 @@ exports.handler = async (event) => {
   }
 
   if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers,
-      body: JSON.stringify({ error: '仅支持 POST' })
-    };
+    return { statusCode: 405, headers, body: JSON.stringify({ error: '仅支持 POST' }) };
   }
 
   try {
-    const { fileId, fileExt, targetFormat } = JSON.parse(event.body);
-    if (!fileId || !fileExt || !targetFormat) {
+    const { fileBase64, fileName, targetFormat } = JSON.parse(event.body);
+    if (!fileBase64 || !fileName || !targetFormat) {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ success: false, error: '缺少必要参数' })
+        body: JSON.stringify({ success: false, error: '缺少参数：fileBase64, fileName, targetFormat' })
       };
     }
 
-    // 构造 JSON body，将 Secret 作为参数之一
-    const requestBody = {
-      Parameters: [
-        { Name: 'FileId', Value: fileId },
-        { Name: 'StoreFile', Value: true },
-        { Name: 'Secret', Value: CONVERT_SECRET }  // 密钥放在这里
-      ]
-    };
+    // 解码 Base64 为 Buffer
+    const fileBuffer = Buffer.from(fileBase64, 'base64');
+    
+    // 动态 require form-data
+    const FormData = require('form-data');
+    const form = new FormData();
+    form.append('File', fileBuffer, { filename: fileName });
 
-    const convertUrl = `https://v2.convertapi.com/convert/${fileExt}/to/${targetFormat}`;
+    // 推断源格式
+    const fileExt = fileName.split('.').pop().toLowerCase();
 
-    // 使用内置 fetch（Netlify Node 18+ 支持）
+    // 直接调用转换端点，同时上传文件
+    const convertUrl = `https://v2.convertapi.com/convert/${fileExt}/to/${targetFormat}?secret=${CONVERT_SECRET}&StoreFile=true`;
+
     const response = await fetch(convertUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
+      body: form,
+      headers: form.getHeaders()
     });
 
     const data = await response.json();
@@ -57,7 +53,7 @@ exports.handler = async (event) => {
     }
 
     if (!data.Files || data.Files.length === 0) {
-      throw new Error('转换失败：未返回文件，可能格式不支持');
+      throw new Error('未返回文件');
     }
 
     return {
