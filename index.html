@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>高保真转换器</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #f0f2f5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      width: 100%;
+      max-width: 440px;
+      background: #fff;
+      border-radius: 24px;
+      padding: 30px 24px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.05);
+      margin-top: 20px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 26px;
+      color: #1e293b;
+      margin-bottom: 24px;
+      font-weight: 700;
+    }
+    .upload-zone {
+      background: #f8fafc;
+      border: 2px dashed #cbd5e1;
+      border-radius: 16px;
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: 0.2s;
+      margin-bottom: 20px;
+    }
+    .upload-zone:active { border-color: #3b82f6; background: #eff6ff; }
+    .upload-icon { font-size: 38px; margin-bottom: 8px; }
+    .upload-text { font-size: 16px; color: #334155; font-weight: 500; }
+    .upload-hint { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+
+    .format-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .format-btn {
+      flex: 1;
+      padding: 12px 4px;
+      border: none;
+      border-radius: 12px;
+      background: #f1f5f9;
+      font-size: 14px;
+      font-weight: 500;
+      color: #475569;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .format-btn.active {
+      background: #2563eb;
+      color: white;
+      box-shadow: 0 4px 12px rgba(37,99,235,0.25);
+    }
+
+    .progress-wrap {
+      display: none;
+      margin-bottom: 20px;
+    }
+    .progress-bar {
+      height: 8px;
+      background: #e2e8f0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: #2563eb;
+      transition: width 0.3s ease;
+    }
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 13px;
+      color: #64748b;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 14px;
+      font-size: 17px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 10px;
+    }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:disabled { background: #94a3b8; opacity: 0.6; }
+    .btn-download { background: #10b981; display: none; }
+    .error {
+      color: #dc2626;
+      font-size: 13px;
+      text-align: center;
+      margin-top: 8px;
+    }
+
+    .key-section {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid #e2e8f0;
+      text-align: center;
+      font-size: 13px;
+      color: #64748b;
+    }
+    .key-input {
+      width: 80%;
+      padding: 8px 12px;
+      margin: 8px 0;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      text-align: center;
+      font-size: 13px;
+    }
+    .key-hint {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+    .key-hint a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>📄 高保真转换器</h1>
+
+  <!-- 上传区域 -->
+  <div class="upload-zone" id="uploadZone">
+    <div class="upload-icon">📂</div>
+    <div class="upload-text" id="fileNameDisplay">点击或拖拽上传文件</div>
+    <div class="upload-hint">PDF、Word、PPT，最大 50MB</div>
+  </div>
+  <input type="file" id="fileInput" hidden accept=".pdf,.doc,.docx,.ppt,.pptx,image/*">
+
+  <!-- 格式选择 -->
+  <div class="format-row">
+    <button class="format-btn active" data-format="docx">📝 Word</button>
+    <button class="format-btn" data-format="pdf">📄 PDF</button>
+    <button class="format-btn" data-format="txt">📃 TXT</button>
+    <button class="format-btn" data-format="pptx">📊 PPT</button>
+  </div>
+
+  <!-- 进度条 -->
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-info">
+      <span id="progressLabel">上传中...</span>
+      <span id="progressPercent">0%</span>
+    </div>
+  </div>
+
+  <!-- 按钮 -->
+  <button class="btn btn-primary" id="convertBtn" disabled>🚀 开始转换</button>
+  <button class="btn btn-download" id="downloadBtn">⬇️ 下载结果</button>
+  <div class="error" id="errorMsg"></div>
+
+  <!-- Token 管理 -->
+  <div class="key-section">
+    <p>🔑 你的 ConvertAPI Token</p>
+    <input class="key-input" type="text" id="apiKeyInput" placeholder="粘贴 token_...">
+    <button id="saveKeyBtn" class="btn btn-primary" style="padding:10px; margin-top:5px;">保存密钥</button>
+    <p class="key-hint">
+      <a href="https://www.convertapi.com/a" target="_blank">点此免费注册获取 Token（每天 250 次）</a>
+    </p>
+  </div>
+</div>
+
+<script>
+  (function() {
+    // 代理地址（Netlify 函数）
+    const PROXY_API = '/api/convert';
+    let apiKey = localStorage.getItem('convertapi_token') || '';
+
+    // DOM 元素
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileNameDisplay = document.getElementById('fileNameDisplay');
+    const convertBtn = document.getElementById('convertBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressFill = document.getElementById('progressFill');
+    const progressLabel = document.getElementById('progressLabel');
+    const progressPercent = document.getElementById('progressPercent');
+    const errorMsg = document.getElementById('errorMsg');
+    const apiKeyInput = document.getElementById('apiKeyInput');
+    const saveKeyBtn = document.getElementById('saveKeyBtn');
+
+    let selectedFile = null;
+    let targetFormat = 'docx';
+
+    apiKeyInput.value = apiKey;
+
+    // 保存 Token
+    saveKeyBtn.addEventListener('click', () => {
+      const key = apiKeyInput.value.trim();
+      if (key) {
+        localStorage.setItem('convertapi_token', key);
+        apiKey = key;
+        alert('密钥已保存');
+      }
+    });
+
+    // 上传交互
+    uploadZone.addEventListener('click', () => fileInput.click());
+    uploadZone.addEventListener('dragover', e => e.preventDefault());
+    uploadZone.addEventListener('drop', e => {
+      e.preventDefault();
+      handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+
+    function handleFile(file) {
+      if (!file) return;
+      if (file.size > 50 * 1024 * 1024) {
+        errorMsg.textContent = '文件不能超过 50MB';
+        return;
+      }
+      selectedFile = file;
+      fileNameDisplay.textContent = file.name;
+      convertBtn.disabled = false;
+      resetUI();
+    }
+
+    // 格式选择
+    document.querySelectorAll('.format-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        targetFormat = this.dataset.format;
+      });
+    });
+
+    // 转换与下载按钮
+    convertBtn.addEventListener('click', startConvert);
+    downloadBtn.addEventListener('click', () => {
+      if (downloadBtn.dataset.url) window.open(downloadBtn.dataset.url, '_blank');
+    });
+
+    function resetUI() {
+      progressWrap.style.display = 'none';
+      downloadBtn.style.display = 'none';
+      convertBtn.style.display = 'block';
+      errorMsg.textContent = '';
+      updateProgress(0, '');
+    }
+
+    function updateProgress(percent, label) {
+      progressFill.style.width = percent + '%';
+      progressPercent.textContent = percent + '%';
+      if (label) progressLabel.textContent = label;
+    }
+
+    async function startConvert() {
+      if (!selectedFile) return;
+      if (!apiKey) {
+        errorMsg.textContent = '请先填写并保存 ConvertAPI Token';
+        return;
+      }
+
+      convertBtn.disabled = true;
+      progressWrap.style.display = 'block';
+      downloadBtn.style.display = 'none';
+      errorMsg.textContent = '';
+      updateProgress(10, '准备文件...');
+
+      try {
+        // 1. 文件转 base64
+        const reader = new FileReader();
+        const fileBase64 = await new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(selectedFile);
+        });
+
+        updateProgress(30, '正在转换...');
+
+        // 2. 调用 Netlify 云函数
+        const res = await fetch(PROXY_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64,
+            fileName: selectedFile.name,
+            targetFormat: targetFormat,
+            token: apiKey
+          })
+        });
+
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '转换失败');
+
+        updateProgress(100, '转换完成！');
+        convertBtn.style.display = 'none';
+        downloadBtn.style.display = 'block';
+        downloadBtn.dataset.url = data.downloadUrl;
+
+      } catch (err) {
+        console.error(err);
+        errorMsg.textContent = '转换失败: ' + err.message;
+        updateProgress(0, '');
+        convertBtn.disabled = false;
+      }
+    }
+  })();
+</script>
+</body>
+</html>
