@@ -6,6 +6,7 @@
   <title>高保真转换器</title>
   <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
   <style>
+    /* 样式保持不变，与之前相同，此处省略 */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       background: #f0f2f5;
@@ -46,7 +47,6 @@
     .upload-icon { font-size: 38px; margin-bottom: 8px; }
     .upload-text { font-size: 16px; color: #334155; font-weight: 500; }
     .upload-hint { font-size: 13px; color: #94a3b8; margin-top: 4px; }
-
     .format-row {
       display: flex;
       gap: 8px;
@@ -69,7 +69,6 @@
       color: white;
       box-shadow: 0 4px 12px rgba(37,99,235,0.25);
     }
-
     .progress-wrap {
       display: none;
       margin-bottom: 20px;
@@ -93,7 +92,6 @@
       font-size: 13px;
       color: #64748b;
     }
-
     .btn {
       width: 100%;
       padding: 16px;
@@ -127,7 +125,6 @@
 <div class="container">
   <h1>📄 高保真转换器</h1>
 
-  <!-- 上传区域 -->
   <div class="upload-zone" id="uploadZone">
     <div class="upload-icon">📂</div>
     <div class="upload-text" id="fileNameDisplay">点击或拖拽上传文件</div>
@@ -135,7 +132,6 @@
   </div>
   <input type="file" id="fileInput" hidden accept=".pdf,.doc,.docx,.ppt,.pptx,image/*">
 
-  <!-- 格式选择 -->
   <div class="format-row">
     <button class="format-btn active" data-format="docx">📝 Word</button>
     <button class="format-btn" data-format="pdf">📄 PDF</button>
@@ -143,7 +139,6 @@
     <button class="format-btn" data-format="pptx">📊 PPT</button>
   </div>
 
-  <!-- 进度条 -->
   <div class="progress-wrap" id="progressWrap">
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
     <div class="progress-info">
@@ -152,7 +147,6 @@
     </div>
   </div>
 
-  <!-- 按钮 -->
   <button class="btn btn-primary" id="convertBtn" disabled>🚀 开始转换</button>
   <button class="btn btn-download" id="downloadBtn">⬇️ 下载结果</button>
   <div class="error" id="errorMsg"></div>
@@ -162,12 +156,8 @@
 
 <script>
   (function() {
-    // 前端上传用的公开 secret（可暴露，仅用于上传，调用次数无限）
-    // 注意：此 secret 仅用于上传文件，转换密钥由后端持有，安全无忧
-    const UPLOAD_SECRET = '29E4EDmfLee8q4ZKUzA8ioAVLSrTOIH8';  // 替换为你的 ConvertAPI Secret
     const PROXY_API = '/api/convert';
 
-    // DOM 元素
     const uploadZone = document.getElementById('uploadZone');
     const fileInput = document.getElementById('fileInput');
     const fileNameDisplay = document.getElementById('fileNameDisplay');
@@ -182,7 +172,6 @@
     let selectedFile = null;
     let targetFormat = 'docx';
 
-    // 上传交互
     uploadZone.addEventListener('click', () => fileInput.click());
     uploadZone.addEventListener('dragover', e => e.preventDefault());
     uploadZone.addEventListener('drop', e => {
@@ -203,7 +192,6 @@
       resetUI();
     }
 
-    // 格式选择
     document.querySelectorAll('.format-btn').forEach(btn => {
       btn.addEventListener('click', function() {
         document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
@@ -212,7 +200,6 @@
       });
     });
 
-    // 转换与下载按钮
     convertBtn.addEventListener('click', startConvert);
     downloadBtn.addEventListener('click', () => {
       if (downloadBtn.dataset.url) window.open(downloadBtn.dataset.url, '_blank');
@@ -241,27 +228,23 @@
       errorMsg.textContent = '';
 
       try {
-        // 1. 直接上传文件到 ConvertAPI（获取 fileId）
-        updateProgress(5, '正在上传文件...');
-        const formData = new FormData();
-        formData.append('File', selectedFile);
+        updateProgress(5, '正在读取文件...');
+        // 将文件转为 Base64
+        const reader = new FileReader();
+        const fileBase64 = await new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(selectedFile);
+        });
 
-        const uploadUrl = `https://v2.convertapi.com/upload?secret=${UPLOAD_SECRET}`;
-        const uploadResp = await fetch(uploadUrl, { method: 'POST', body: formData });
-        const uploadData = await uploadResp.json();
-        if (uploadData.Error) throw new Error(uploadData.Error);
-        const fileId = uploadData.FileId;
-        const fileExt = uploadData.FileExt;
-
-        // 2. 发送转换请求到 Netlify 云函数
-        updateProgress(30, '正在转换...');
+        updateProgress(20, '正在上传并转换...');
         const res = await fetch(PROXY_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            fileId,
-            fileExt,
-            targetFormat
+            fileBase64,
+            fileName: selectedFile.name,
+            targetFormat: targetFormat
           })
         });
 
