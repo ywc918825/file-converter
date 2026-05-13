@@ -2,6 +2,13 @@
   publish = "."
   functions = "netlify/functions"
 
+[functions]
+  node_bundler = "esbuild"
+
+[functions.convert]
+  memory = 1024      # 1GB 内存，处理大文件
+  timeout = 30       # 30 秒超时
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
