@@ -1,7 +1,9 @@
 const fetch = require('node-fetch');
 const FormData = require('form-data');
 const { parse } = require('parse-multipart-data');
-const CONVERT_SECRET = '29E4EDmfLee8q4ZKUzA8ioAVLSrTOIH8';  // 替换！
+
+// 🔒 替换为你的 ConvertAPI Secret
+const CONVERT_SECRET = '29E4EDmfLee8q4ZKUzA8ioAVLSrTOIH8';
 
 const respond = (code, data) => ({
   statusCode: code,
@@ -14,6 +16,7 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return respond(405, { success: false, error: '仅支持 POST' });
 
   try {
+    // 1. 解析 multipart 数据
     const contentType = event.headers['content-type'] || event.headers['Content-Type'] || '';
     const boundaryMatch = contentType.match(/boundary=(.*)/);
     if (!boundaryMatch) throw new Error('无法获取 boundary');
@@ -21,6 +24,7 @@ exports.handler = async (event) => {
     const bodyBuffer = Buffer.from(event.body, 'base64');
     const parts = parse(bodyBuffer, boundary);
 
+    // 2. 提取文件和目标格式
     let fileBuffer = null, fileName = '', targetFormat = 'docx';
     for (const part of parts) {
       if (part.name === 'file') {
@@ -30,21 +34,21 @@ exports.handler = async (event) => {
         targetFormat = part.data.toString('utf-8').trim();
       }
     }
-
     if (!fileBuffer || !fileName) throw new Error('未收到文件');
-    console.log(`收到文件: ${fileName}, 大小: ${(fileBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+    console.log(`接收文件: ${fileName}, 大小: ${(fileBuffer.length / 1024 / 1024).toFixed(2)}MB`);
 
+    // 3. 准备发送给 ConvertAPI 的表单
     const fileExt = fileName.split('.').pop().toLowerCase();
     const form = new FormData();
     form.append('File', fileBuffer, { filename: fileName });
 
-    // 添加保真参数
-    const parameters = [{ Name: 'StoreFile', Value: true }];
+    // 4. 构建转换 URL（添加图片质量参数）
+    const params = [{ Name: 'StoreFile', Value: true }];
     if (targetFormat === 'pdf' || fileExt.match(/^(jpg|jpeg|png|gif|bmp|webp)$/)) {
-      parameters.push({ Name: 'ImageQuality', Value: '100' });
-      parameters.push({ Name: 'ImageResolution', Value: '300' });
+      params.push({ Name: 'ImageQuality', Value: '100' });
+      params.push({ Name: 'ImageResolution', Value: '300' });
     }
-    const paramsStr = parameters.map(p => `${p.Name}=${p.Value}`).join('&');
+    const paramsStr = params.map(p => `${p.Name}=${p.Value}`).join('&');
     const convertUrl = `https://v2.convertapi.com/convert/${fileExt}/to/${targetFormat}?secret=${CONVERT_SECRET}&${paramsStr}`;
 
     console.log('调用 ConvertAPI...');
