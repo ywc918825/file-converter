@@ -1,4 +1,4 @@
-const axios = require('axios');
+const fetch = require('node-fetch');
 const FormData = require('form-data');
 const CONVERT_SECRET = '29E4EDmfLee8q4ZKUzA8ioAVLSrTOIH8';  // 替换成真实 Secret
 
@@ -17,7 +17,8 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { fileBase64, fileName, targetFormat } = JSON.parse(event.body);
+    const body = JSON.parse(event.body);
+    const { fileBase64, fileName, targetFormat } = body;
     if (!fileBase64 || !fileName || !targetFormat) {
       return {
         statusCode: 400,
@@ -33,19 +34,19 @@ exports.handler = async (event) => {
 
     const convertUrl = `https://v2.convertapi.com/convert/${fileExt}/to/${targetFormat}?secret=${CONVERT_SECRET}&StoreFile=true`;
 
-    const response = await axios.post(convertUrl, form, {
-      headers: form.getHeaders(),
-      // 不设置 maxContentLength 限制，支持大文件
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity
+    const response = await fetch(convertUrl, {
+      method: 'POST',
+      body: form,
+      headers: form.getHeaders()
     });
 
-    const data = response.data;
+    const data = await response.json();
+
     if (data.Error) {
       throw new Error(data.Error);
     }
     if (!data.Files || data.Files.length === 0) {
-      throw new Error('ConvertAPI 未返回文件');
+      throw new Error('ConvertAPI 未返回文件，可能是格式不支持');
     }
 
     return {
@@ -54,21 +55,11 @@ exports.handler = async (event) => {
       body: JSON.stringify({ success: true, downloadUrl: data.Files[0].Url })
     };
   } catch (err) {
-    // 如果 axios 请求返回了响应，则提取响应体（可能是文本或 JSON）
-    let errorMessage = err.message;
-    if (err.response) {
-      // 把 ConvertAPI 返回的原始内容原样返回给前端
-      const raw = typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data);
-      return {
-        statusCode: 502,
-        headers,
-        body: JSON.stringify({ success: false, error: 'ConvertAPI 返回错误（状态码 ' + err.response.status + '）', detail: raw })
-      };
-    }
+    console.error('函数错误:', err);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ success: false, error: errorMessage })
+      body: JSON.stringify({ success: false, error: err.message })
     };
   }
 };
