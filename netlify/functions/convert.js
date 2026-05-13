@@ -1,10 +1,9 @@
-const axios = require('axios');
-const FormData = require('form-data');
+const fetch = require('node-fetch');
 const { parse } = require('parse-multipart-data');
 
-const CONVERT_SECRET = '29E4EDmfLee8q4ZKUzA8ioAVLSrTOIH8'; // 替换！
+// 使用 MinerU Agent 模式（免费，无需 Token）
+const MINERU_API = 'https://mineru.net/api/v4/file-extract';
 
-// ... (respond 辅助函数，保持不变)
 const respond = (code, data) => ({
   statusCode: code,
   headers: {
@@ -15,15 +14,12 @@ const respond = (code, data) => ({
 });
 
 exports.handler = async (event) => {
-  // ... (预检和请求方法检查，保持不变)
   if (event.httpMethod === 'OPTIONS') return respond(200, {});
   if (event.httpMethod !== 'POST') return respond(405, { success: false, error: '仅支持 POST' });
 
   try {
-    // 1. 解析文件
-    // ... (解析 multipart 数据，提取文件 Buffer 和 targetFormat，保持不变)
+    // 1. 解析文件（和之前一样）
     const contentType = event.headers['content-type'] || event.headers['Content-Type'] || '';
-    // ... (代码省略，与之前相同) ...
     const boundaryMatch = contentType.match(/boundary=(.*)/);
     if (!boundaryMatch) throw new Error('无法获取 boundary');
     const boundary = boundaryMatch[1];
@@ -40,62 +36,53 @@ exports.handler = async (event) => {
       }
     }
     if (!fileBuffer || !fileName) throw new Error('未收到文件');
-    console.log(`接收文件: ${fileName}, 大小: ${(fileBuffer.length / 1024 / 1024).toFixed(2)}MB`);
 
-    const fileExt = fileName.split('.').pop().toLowerCase();
+    // 2. 把文件上传到临时存储（获取一个公网 URL）
+    // 这里使用 file.io 临时存储（免费，文件保留 1 天）
+    const tempForm = new (require('form-data'))();
+    tempForm.append('file', fileBuffer, { filename: fileName });
+    const tempResponse = await fetch('https://file.io', {
+      method: 'POST',
+      body: tempForm,
+      headers: tempForm.getHeaders()
+    });
+    const tempData = await tempResponse.json();
+    if (!tempData.link) throw new Error('文件上传临时存储失败');
+    const fileUrl = tempData.link;
 
-    // --- 代码改进点：使用异步工作流 (Async Workflow) ---
-    const baseUrl = 'https://v2.convertapi.com';
+    // 3. 提交给 MinerU 解析
+    const taskRes = await fetch(MINERU_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: fileUrl,
+        checksum: '',
+        content: JSON.stringify({ file_name: fileName })
+      })
+    });
+    const taskData = await taskRes.json();
+    if (taskData.status !== 'success') throw new Error(taskData.message || '提交任务失败');
+    const taskId = taskData.data.task_id;
 
-    // 步骤 1：上传文件，获取 FileId
-    const form = new FormData();
-    form.append('File', fileBuffer, { filename: fileName });
-    const uploadResponse = await axios.post(
-      `${baseUrl}/upload?secret=${CONVERT_SECRET}`,
-      form,
-      { headers: form.getHeaders() }
-    );
-    if (uploadResponse.data.Error) throw new Error(uploadResponse.data.Error);
-    const fileId = uploadResponse.data.FileId;
-    console.log(`文件已上传，FileId: ${fileId}`);
-
-    // 步骤 2：发起异步转换任务
-    const convertParams = [
-      { Name: 'FileId', Value: fileId },
-      { Name: 'StoreFile', Value: 'true' },
-      { Name: 'ImageQuality', Value: '100' },
-      { Name: 'ImageResolution', Value: '300' }
-    ];
-    const asyncTaskResponse = await axios.post(
-      `${baseUrl}/async/convert/${fileExt}/to/${targetFormat}?secret=${CONVERT_SECRET}`,
-      { Parameters: convertParams },
-      { headers: { 'Content-Type': 'application/json' } }
-    );
-    if (asyncTaskResponse.data.Error) throw new Error(asyncTaskResponse.data.Error);
-    const jobId = asyncTaskResponse.data.JobId;
-    console.log(`异步任务已提交，JobId: ${jobId}`);
-
-    // 步骤 3：轮询任务状态
-    let resultUrl = null;
+    // 4. 轮询任务结果（等待最多 60 秒）
+    let downloadUrl = null;
     for (let i = 0; i < 30; i++) {
-      const jobStatusResponse = await axios.get(
-        `${baseUrl}/async/job/${jobId}?secret=${CONVERT_SECRET}`
-      );
-      if (jobStatusResponse.data.Status === 'Completed') {
-        resultUrl = jobStatusResponse.data.Files[0].Url;
-        console.log(`转换完成，下载链接: ${resultUrl}`);
+      const statusRes = await fetch(`https://mineru.net/api/v4/extract/task/${taskId}`, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const statusData = await statusRes.json();
+      if (statusData.data.task_status === 'done') {
+        downloadUrl = statusData.data.download_url;
         break;
       }
-      if (jobStatusResponse.data.Status === 'Failed') {
-        throw new Error('异步任务处理失败');
+      if (statusData.data.task_status === 'failed') {
+        throw new Error('转换任务失败');
       }
-      // 等待 2 秒后重试
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(r => setTimeout(r, 2000));
     }
-    if (!resultUrl) throw new Error('异步任务处理超时');
+    if (!downloadUrl) throw new Error('转换超时，请重试');
 
-    return respond(200, { success: true, downloadUrl: resultUrl });
-
+    return respond(200, { success: true, downloadUrl });
   } catch (err) {
     console.error('云函数错误:', err);
     return respond(500, { success: false, error: err.message || '内部错误' });
