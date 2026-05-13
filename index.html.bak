@@ -164,7 +164,7 @@
   (function() {
     // 前端上传用的公开 secret（可暴露，仅用于上传，调用次数无限）
     // 注意：此 secret 仅用于上传文件，转换密钥由后端持有，安全无忧
-    const UPLOAD_SECRET = 'eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiI1MDcwMDU4NiIsInJvbCI6IlJPTEVfUkVHSVNURVIiLCJpc3MiOiJPcGVuWExhYiIsImlhdCI6MTc3ODU2NjA3MiwiY2xpZW50SWQiOiJsa3pkeDU3bnZ5MjJqa3BxOXgydyIsInBob25lIjoiIiwib3BlbklkIjpudWxsLCJ1dWlkIjoiMjUzYWUxYWEtYzkzMi00ZmFhLWJlZGUtOTQ0MGEzYmE4N2RmIiwiZW1haWwiOiIiLCJleHAiOjE3ODYzNDIwNzJ9.61mmGOZuBleHoGkSXyOK1p20GT9dLlwe7h9khlZ-PcCFdIBk9n8TZgeh6mFEIq6cmgJAgnQOv8g-ii_DRCHdOw';  // 替换为你的 ConvertAPI Secret
+    const UPLOAD_SECRET = '你的ConvertAPI_Secret_用于上传';  // 替换为你的 ConvertAPI Secret
     const PROXY_API = '/api/convert';
 
     // DOM 元素
