@@ -1,8 +1,9 @@
-// 转换用的 Secret，安全存储在后端，不会暴露给前端
-const CONVERT_SECRET = 'eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiI1MDcwMDU4NiIsInJvbCI6IlJPTEVfUkVHSVNURVIiLCJpc3MiOiJPcGVuWExhYiIsImlhdCI6MTc3ODU2NjA3MiwiY2xpZW50SWQiOiJsa3pkeDU3bnZ5MjJqa3BxOXgydyIsInBob25lIjoiIiwib3BlbklkIjpudWxsLCJ1dWlkIjoiMjUzYWUxYWEtYzkzMi00ZmFhLWJlZGUtOTQ0MGEzYmE4N2RmIiwiZW1haWwiOiIiLCJleHAiOjE3ODYzNDIwNzJ9.61mmGOZuBleHoGkSXyOK1p20GT9dLlwe7h9khlZ-PcCFdIBk9n8TZgeh6mFEIq6cmgJAgnQOv8g-ii_DRCHdOw';  // 替换为你的 ConvertAPI Secret
+// netlify/functions/convert.js
+// 转换专用 Secret，安全存储在后端，不暴露
+const CONVERT_SECRET = 'eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiI1MDcwMDU4NiIsInJvbCI6IlJPTEVfUkVHSVNURVIiLCJpc3MiOiJPcGVuWExhYiIsImlhdCI6MTc3ODU2NjA3MiwiY2xpZW50SWQiOiJsa3pkeDU3bnZ5MjJqa3BxOXgydyIsInBob25lIjoiIiwib3BlbklkIjpudWxsLCJ1dWlkIjoiMjUzYWUxYWEtYzkzMi00ZmFhLWJlZGUtOTQ0MGEzYmE4N2RmIiwiZW1haWwiOiIiLCJleHAiOjE3ODYzNDIwNzJ9.61mmGOZuBleHoGkSXyOK1p20GT9dLlwe7h9khlZ-PcCFdIBk9n8TZgeh6mFEIq6cmgJAgnQOv8g-ii_DRCHdOw'; // 替换为你真实的 Secret
 
 exports.handler = async (event) => {
-  // 设置 CORS 头
+  // CORS 头
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -27,21 +28,36 @@ exports.handler = async (event) => {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ success: false, error: '缺少参数' })
+        body: JSON.stringify({ success: false, error: '缺少必要参数' })
       };
     }
 
-    // 调用 ConvertAPI 转换接口（使用 secret 参数）
-    const convertUrl = `https://v2.convertapi.com/convert/${fileExt}/to/${targetFormat}?secret=${CONVERT_SECRET}&FileId=${fileId}&StoreFile=true`;
+    // 构造 JSON body，将 Secret 作为参数之一
+    const requestBody = {
+      Parameters: [
+        { Name: 'FileId', Value: fileId },
+        { Name: 'StoreFile', Value: true },
+        { Name: 'Secret', Value: CONVERT_SECRET }  // 密钥放在这里
+      ]
+    };
 
-    // 动态导入 node-fetch (Netlify Node 18+ 内置 fetch，直接用)
-   // const fetch = require('node-fetch'); // 如果运行环境默认不带 fetch，可以保留
-    const response = await fetch(convertUrl, { method: 'POST' });
+    const convertUrl = `https://v2.convertapi.com/convert/${fileExt}/to/${targetFormat}`;
+
+    // 使用内置 fetch（Netlify Node 18+ 支持）
+    const response = await fetch(convertUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    });
+
     const data = await response.json();
 
-    if (data.Error) throw new Error(data.Error);
+    if (data.Error) {
+      throw new Error(data.Error);
+    }
+
     if (!data.Files || data.Files.length === 0) {
-      throw new Error('转换失败：未返回文件');
+      throw new Error('转换失败：未返回文件，可能格式不支持');
     }
 
     return {
