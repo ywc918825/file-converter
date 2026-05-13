@@ -2,7 +2,8 @@ const axios = require('axios');
 const FormData = require('form-data');
 const { parse } = require('parse-multipart-data');
 
-const MINERU_API = 'https://mineru.net/api/v4/file-extract';
+// 如果用 ConvertAPI，填入你的 Secret；如果用 MinerU，可忽略
+const CONVERT_SECRET = '29E4EDmfLee8q4ZKUzA8ioAVLSrTOIH8';  // 替换！
 
 const respond = (code, data) => ({
   statusCode: code,
@@ -18,7 +19,7 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return respond(405, { success: false, error: '仅支持 POST' });
 
   try {
-    // 1. 解析文件
+    // 1. 解析 multipart 数据
     const contentType = event.headers['content-type'] || event.headers['Content-Type'] || '';
     const boundaryMatch = contentType.match(/boundary=(.*)/);
     if (!boundaryMatch) throw new Error('无法获取 boundary');
@@ -37,49 +38,58 @@ exports.handler = async (event) => {
     }
     if (!fileBuffer || !fileName) throw new Error('未收到文件');
 
-    // 2. 上传到临时存储（file.io）
-    const tempForm = new FormData();
-    tempForm.append('file', fileBuffer, { filename: fileName });
-    const tempRes = await axios.post('https://file.io', tempForm, {
-      headers: tempForm.getHeaders(),
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity
-    });
-    if (!tempRes.data.link) throw new Error('文件上传临时存储失败: ' + (tempRes.data.message || ''));
-    const fileUrl = tempRes.data.link;
-    console.log('临时文件URL:', fileUrl);
+    const fileExt = fileName.split('.').pop().toLowerCase();
 
-    // 3. 提交 MinerU 任务
-    const taskRes = await axios.post(MINERU_API, {
-      url: fileUrl,
-      checksum: '',
-      content: JSON.stringify({ file_name: fileName })
-    }, {
-      headers: { 'Content-Type': 'application/json' }
-    });
-    if (taskRes.data.status !== 'success') {
-      throw new Error(taskRes.data.message || '任务提交失败');
-    }
-    const taskId = taskRes.data.data.task_id;
-    console.log('任务ID:', taskId);
+    // 2. 上传文件到 ConvertAPI
+    const form = new FormData();
+    form.append('File', fileBuffer, { filename: fileName });
+    const uploadRes = await axios.post(
+      `https://v2.convertapi.com/upload?secret=${CONVERT_SECRET}`,
+      form,
+      { headers: form.getHeaders() }
+    );
+    if (uploadRes.data.Error) throw new Error(uploadRes.data.Error);
+    const fileId = uploadRes.data.FileId;
+
+    // 3. 提交异步转换任务
+    const asyncRes = await axios.post(
+      `https://v2.convertapi.com/async/convert/${fileExt}/to/${targetFormat}?secret=${CONVERT_SECRET}`,
+      {
+        Parameters: [
+          { Name: 'FileId', Value: fileId },
+          { Name: 'StoreFile', Value: 'true' },
+          { Name: 'ImageQuality', Value: '100' },
+          { Name: 'ImageResolution', Value: '300' }
+        ]
+      },
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+    if (asyncRes.data.Error) throw new Error(asyncRes.data.Error);
+    const jobId = asyncRes.data.JobId;
 
     // 4. 轮询结果
     let resultUrl = null;
     for (let i = 0; i < 30; i++) {
-      const statusRes = await axios.get(`https://mineru.net/api/v4/extract/task/${taskId}`);
-      if (statusRes.data.data.task_status === 'done') {
-        resultUrl = statusRes.data.data.download_url;
+      const jobRes = await axios.get(
+        `https://v2.convertapi.com/async/job/${jobId}?secret=${CONVERT_SECRET}`
+      );
+      if (jobRes.data.Status === 'Completed') {
+        resultUrl = jobRes.data.Files[0].Url;
         break;
       }
-      if (statusRes.data.data.task_status === 'failed') {
-        throw new Error('MinerU 转换失败');
-      }
+      if (jobRes.data.Status === 'Failed') throw new Error('任务失败');
       await new Promise(r => setTimeout(r, 2000));
     }
-    if (!resultUrl) throw new Error('转换超时，请重试');
+    if (!resultUrl) throw new Error('转换超时');
+
     return respond(200, { success: true, downloadUrl: resultUrl });
   } catch (err) {
-    console.error('MinerU 错误:', err.response?.data || err.message);
-    return respond(500, { success: false, error: err.message || '内部错误' });
+    // 返回详细错误信息，包括服务器原始响应
+    return respond(500, {
+      success: false,
+      error: err.message,
+      detail: err.response?.data || null,
+      stack: err.stack
+    });
   }
 };
