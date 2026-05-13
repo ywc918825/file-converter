@@ -37,9 +37,10 @@
   <div class="upload-zone" id="uploadZone">
     <div class="upload-icon">📂</div>
     <div class="upload-text" id="fileNameDisplay">点击或拖拽上传文件</div>
-    <div class="upload-hint">PDF、Word、PPT，最大 50MB</div>
+    <div class="upload-hint">支持任意文件，手机可选相册/文件</div>
   </div>
-  <input type="file" id="fileInput" hidden accept=".pdf,.doc,.docx,.ppt,.pptx,image/*">
+  <!-- 关键修改：接受所有文件，手机浏览器会弹出文件/相册选择 -->
+  <input type="file" id="fileInput" hidden accept="*/*">
 
   <div class="format-row">
     <button class="format-btn active" data-format="docx">📝 Word</button>
@@ -60,7 +61,7 @@
   <button class="btn btn-download" id="downloadBtn">⬇️ 下载结果</button>
   <div class="error" id="errorMsg"></div>
 
-  <div class="note">⚡ 密钥内置，每天免费 250 次转换</div>
+  <div class="note">⚡ 采用 MinerU 引擎，免费高保真</div>
 </div>
 
 <script>
@@ -95,6 +96,7 @@
         errorMsg.textContent = '文件不能超过 50MB';
         return;
       }
+      // 不再检查文件类型，手机可自由选择
       selectedFile = file;
       fileNameDisplay.textContent = file.name;
       convertBtn.disabled = false;
@@ -148,11 +150,12 @@
         convertBtn.style.display = 'none';
         downloadBtn.style.display = 'block';
 
-        // 下载并重命名，避免乱码
+        // 下载并智能重命名，避免乱码
         downloadBtn.onclick = async () => {
           try {
             const dlRes = await fetch(data.downloadUrl);
             const blob = await dlRes.blob();
+            // 根据目标格式确定后缀，若文件返回格式不同则按目标命名
             const ext = targetFormat === 'docx' ? 'docx' : targetFormat === 'pptx' ? 'pptx' : targetFormat;
             const newName = selectedFile.name.replace(/\.[^/.]+$/, '') + '_converted.' + ext;
             const a = document.createElement('a');
