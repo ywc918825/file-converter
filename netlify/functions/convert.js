@@ -1,7 +1,7 @@
-const fetch = require('node-fetch');
+const axios = require('axios');
+const FormData = require('form-data');
 const { parse } = require('parse-multipart-data');
 
-// 使用 MinerU Agent 模式（免费，无需 Token）
 const MINERU_API = 'https://mineru.net/api/v4/file-extract';
 
 const respond = (code, data) => ({
@@ -18,7 +18,7 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return respond(405, { success: false, error: '仅支持 POST' });
 
   try {
-    // 1. 解析文件（和之前一样）
+    // 1. 解析文件
     const contentType = event.headers['content-type'] || event.headers['Content-Type'] || '';
     const boundaryMatch = contentType.match(/boundary=(.*)/);
     if (!boundaryMatch) throw new Error('无法获取 boundary');
@@ -37,54 +37,49 @@ exports.handler = async (event) => {
     }
     if (!fileBuffer || !fileName) throw new Error('未收到文件');
 
-    // 2. 把文件上传到临时存储（获取一个公网 URL）
-    // 这里使用 file.io 临时存储（免费，文件保留 1 天）
-    const tempForm = new (require('form-data'))();
+    // 2. 上传到临时存储（file.io）
+    const tempForm = new FormData();
     tempForm.append('file', fileBuffer, { filename: fileName });
-    const tempResponse = await fetch('https://file.io', {
-      method: 'POST',
-      body: tempForm,
-      headers: tempForm.getHeaders()
+    const tempRes = await axios.post('https://file.io', tempForm, {
+      headers: tempForm.getHeaders(),
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
     });
-    const tempData = await tempResponse.json();
-    if (!tempData.link) throw new Error('文件上传临时存储失败');
-    const fileUrl = tempData.link;
+    if (!tempRes.data.link) throw new Error('文件上传临时存储失败: ' + (tempRes.data.message || ''));
+    const fileUrl = tempRes.data.link;
+    console.log('临时文件URL:', fileUrl);
 
-    // 3. 提交给 MinerU 解析
-    const taskRes = await fetch(MINERU_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: fileUrl,
-        checksum: '',
-        content: JSON.stringify({ file_name: fileName })
-      })
+    // 3. 提交 MinerU 任务
+    const taskRes = await axios.post(MINERU_API, {
+      url: fileUrl,
+      checksum: '',
+      content: JSON.stringify({ file_name: fileName })
+    }, {
+      headers: { 'Content-Type': 'application/json' }
     });
-    const taskData = await taskRes.json();
-    if (taskData.status !== 'success') throw new Error(taskData.message || '提交任务失败');
-    const taskId = taskData.data.task_id;
+    if (taskRes.data.status !== 'success') {
+      throw new Error(taskRes.data.message || '任务提交失败');
+    }
+    const taskId = taskRes.data.data.task_id;
+    console.log('任务ID:', taskId);
 
-    // 4. 轮询任务结果（等待最多 60 秒）
-    let downloadUrl = null;
+    // 4. 轮询结果
+    let resultUrl = null;
     for (let i = 0; i < 30; i++) {
-      const statusRes = await fetch(`https://mineru.net/api/v4/extract/task/${taskId}`, {
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const statusData = await statusRes.json();
-      if (statusData.data.task_status === 'done') {
-        downloadUrl = statusData.data.download_url;
+      const statusRes = await axios.get(`https://mineru.net/api/v4/extract/task/${taskId}`);
+      if (statusRes.data.data.task_status === 'done') {
+        resultUrl = statusRes.data.data.download_url;
         break;
       }
-      if (statusData.data.task_status === 'failed') {
-        throw new Error('转换任务失败');
+      if (statusRes.data.data.task_status === 'failed') {
+        throw new Error('MinerU 转换失败');
       }
       await new Promise(r => setTimeout(r, 2000));
     }
-    if (!downloadUrl) throw new Error('转换超时，请重试');
-
-    return respond(200, { success: true, downloadUrl });
+    if (!resultUrl) throw new Error('转换超时，请重试');
+    return respond(200, { success: true, downloadUrl: resultUrl });
   } catch (err) {
-    console.error('云函数错误:', err);
+    console.error('MinerU 错误:', err.response?.data || err.message);
     return respond(500, { success: false, error: err.message || '内部错误' });
   }
 };
