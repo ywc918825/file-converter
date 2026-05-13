@@ -164,53 +164,51 @@
     }
 
     async function startConvert() {
-      if (!selectedFile) return;
-      if (isConverting) {
-        errorMsg.textContent = '转换进行中，请稍候...';
-        return;
-      }
+  if (!selectedFile) return;
 
-      isConverting = true;
-      convertBtn.disabled = true;
-      progressWrap.style.display = 'block';
-      downloadBtn.style.display = 'none';
-      errorMsg.textContent = '';
+  convertBtn.disabled = true;
+  progressWrap.style.display = 'block';
+  downloadBtn.style.display = 'none';
+  errorMsg.textContent = '';
 
+  try {
+    updateProgress(5, '正在上传文件...');
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('targetFormat', targetFormat);
+
+    const res = await fetch(PROXY_API, { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || '转换失败');
+
+    updateProgress(100, '转换完成！');
+    convertBtn.style.display = 'none';
+    downloadBtn.style.display = 'block';
+
+    // 下载并重命名
+    downloadBtn.onclick = async () => {
       try {
-        updateProgress(5, '正在上传文件...');
-
-        const formData = new FormData();
-        formData.append('file', selectedFile);
-        formData.append('targetFormat', targetFormat);
-
-        const res = await fetch(PROXY_API, {
-          method: 'POST',
-          body: formData
-        });
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error || '转换失败');
-
-        updateProgress(100, '转换完成！');
-        convertBtn.style.display = 'none';
-        downloadBtn.style.display = 'block';
-
-        // 绑定下载，使用最新的文件信息
-        bindDownload(data.downloadUrl);
-
-      } catch (err) {
-        console.error(err);
-        errorMsg.textContent = '转换失败: ' + err.message;
-        updateProgress(0, '');
-        convertBtn.disabled = false;
-      } finally {
-        isConverting = false;
-        // 如果成功，不恢复 convertBtn，用户可直接再选文件或再次转换（需重新上传）
-        if (errorMsg.textContent === '') {
-          // 允许用户重新选择文件后再次转换
-          convertBtn.disabled = true;  // 必须重新选择文件
-          fileNameDisplay.textContent = '点击或拖拽上传文件';
-        }
+        const dlRes = await fetch(data.downloadUrl);
+        const blob = await dlRes.blob();
+        const ext = targetFormat === 'docx' ? 'docx' : targetFormat === 'pptx' ? 'pptx' : targetFormat;
+        const newName = selectedFile.name.replace(/\.[^/.]+$/, '') + '_converted.' + ext;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = newName;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } catch (e) {
+        errorMsg.textContent = '下载失败: ' + e.message;
       }
+    };
+  } catch (err) {
+    console.error(err);
+    errorMsg.textContent = '转换失败: ' + err.message;
+    updateProgress(0, '');
+    convertBtn.disabled = false;
+  }
+}
     }
   })();
 </script>
