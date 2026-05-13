@@ -80,10 +80,7 @@
 
     let selectedFile = null;
     let targetFormat = 'docx';
-    let isConverting = false;          // 防止重复点击
-    let lastDownloadUrl = null;        // 上次转换结果的下载链接
 
-    // 上传交互
     uploadZone.addEventListener('click', () => fileInput.click());
     uploadZone.addEventListener('dragover', e => e.preventDefault());
     uploadZone.addEventListener('drop', e => {
@@ -104,7 +101,6 @@
       resetUI();
     }
 
-    // 格式选择
     document.querySelectorAll('.format-btn').forEach(btn => {
       btn.addEventListener('click', function() {
         document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
@@ -113,40 +109,7 @@
       });
     });
 
-    // 转换按钮
     convertBtn.addEventListener('click', startConvert);
-
-    // 下载按钮（使用事件监听器，避免多次绑定）
-    function bindDownload(url) {
-      // 移除旧监听器
-      downloadBtn.removeEventListener('click', handleDownload);
-      lastDownloadUrl = url;
-      downloadBtn.addEventListener('click', handleDownload);
-    }
-
-    async function handleDownload() {
-      if (!lastDownloadUrl) return;
-      try {
-        downloadBtn.disabled = true;
-        downloadBtn.textContent = '下载中...';
-        const res = await fetch(lastDownloadUrl);
-        if (!res.ok) throw new Error('下载失败');
-        const blob = await res.blob();
-        const ext = targetFormat === 'docx' ? 'docx' : targetFormat === 'pptx' ? 'pptx' : targetFormat;
-        const newName = (selectedFile ? selectedFile.name : 'converted').replace(/\.[^/.]+$/, '') + '_converted.' + ext;
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = newName;
-        a.click();
-        URL.revokeObjectURL(a.href);
-        errorMsg.textContent = '';
-      } catch (err) {
-        errorMsg.textContent = '下载失败: ' + err.message;
-      } finally {
-        downloadBtn.disabled = false;
-        downloadBtn.textContent = '⬇️ 下载结果';
-      }
-    }
 
     function resetUI() {
       progressWrap.style.display = 'none';
@@ -154,7 +117,6 @@
       convertBtn.style.display = 'block';
       errorMsg.textContent = '';
       updateProgress(0, '');
-      isConverting = false;
     }
 
     function updateProgress(percent, label) {
@@ -164,51 +126,50 @@
     }
 
     async function startConvert() {
-  if (!selectedFile) return;
+      if (!selectedFile) return;
 
-  convertBtn.disabled = true;
-  progressWrap.style.display = 'block';
-  downloadBtn.style.display = 'none';
-  errorMsg.textContent = '';
+      convertBtn.disabled = true;
+      progressWrap.style.display = 'block';
+      downloadBtn.style.display = 'none';
+      errorMsg.textContent = '';
 
-  try {
-    updateProgress(5, '正在上传文件...');
-
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-    formData.append('targetFormat', targetFormat);
-
-    const res = await fetch(PROXY_API, { method: 'POST', body: formData });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || '转换失败');
-
-    updateProgress(100, '转换完成！');
-    convertBtn.style.display = 'none';
-    downloadBtn.style.display = 'block';
-
-    // 下载并重命名
-    downloadBtn.onclick = async () => {
       try {
-        const dlRes = await fetch(data.downloadUrl);
-        const blob = await dlRes.blob();
-        const ext = targetFormat === 'docx' ? 'docx' : targetFormat === 'pptx' ? 'pptx' : targetFormat;
-        const newName = selectedFile.name.replace(/\.[^/.]+$/, '') + '_converted.' + ext;
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = newName;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      } catch (e) {
-        errorMsg.textContent = '下载失败: ' + e.message;
+        updateProgress(5, '正在上传文件...');
+
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('targetFormat', targetFormat);
+
+        const res = await fetch(PROXY_API, { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '转换失败');
+
+        updateProgress(100, '转换完成！');
+        convertBtn.style.display = 'none';
+        downloadBtn.style.display = 'block';
+
+        // 下载并重命名，避免乱码
+        downloadBtn.onclick = async () => {
+          try {
+            const dlRes = await fetch(data.downloadUrl);
+            const blob = await dlRes.blob();
+            const ext = targetFormat === 'docx' ? 'docx' : targetFormat === 'pptx' ? 'pptx' : targetFormat;
+            const newName = selectedFile.name.replace(/\.[^/.]+$/, '') + '_converted.' + ext;
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = newName;
+            a.click();
+            URL.revokeObjectURL(a.href);
+          } catch (e) {
+            errorMsg.textContent = '下载失败: ' + e.message;
+          }
+        };
+      } catch (err) {
+        console.error(err);
+        errorMsg.textContent = '转换失败: ' + err.message;
+        updateProgress(0, '');
+        convertBtn.disabled = false;
       }
-    };
-  } catch (err) {
-    console.error(err);
-    errorMsg.textContent = '转换失败: ' + err.message;
-    updateProgress(0, '');
-    convertBtn.disabled = false;
-  }
-}
     }
   })();
 </script>
