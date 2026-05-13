@@ -137,23 +137,15 @@
       errorMsg.textContent = '';
 
       try {
-        updateProgress(5, '正在读取文件...');
-        const reader = new FileReader();
-        const fileBase64 = await new Promise((resolve, reject) => {
-          reader.onload = () => resolve(reader.result.split(',')[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(selectedFile);
-        });
+        updateProgress(5, '正在上传文件...');
 
-        updateProgress(20, '正在上传并转换...');
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('targetFormat', targetFormat);
+
         const res = await fetch(PROXY_API, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileBase64,
-            fileName: selectedFile.name,
-            targetFormat: targetFormat
-          })
+          body: formData
         });
 
         const data = await res.json();
